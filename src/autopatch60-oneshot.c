@@ -85,7 +85,19 @@ static void tlog(const char *msg) {
     fclose(f);
 }
 
-static const char WANT_TITLEID[] = "CUSA03041";
+/* CUSA03041 = USA, CUSA08519 = EUR. EUR 1.00 eboot is byte-identical to
+ * USA 1.00 (same size, same anchor RVA 0x468EE1F, same CTX_100); region is
+ * handled by the title-ID gate only, the patch table is shared. */
+static const char *const WANT_TITLEIDS[] = { "CUSA03041", "CUSA08519" };
+#define NWANT (sizeof(WANT_TITLEIDS) / sizeof(WANT_TITLEIDS[0]))
+
+static int is_wanted_title(const char *tid) {
+    unsigned i;
+    for (i = 0; i < NWANT; i++)
+        if (!strcmp(tid, WANT_TITLEIDS[i]))
+            return 1;
+    return 0;
+}
 
 static int g_sock = -1;
 
@@ -358,11 +370,11 @@ int main(void) {
     for (waited = 0; waited < LIMIT; waited++) {
         if (fg_app(&pid, titleid, appver))
             break; /* dead connection: exit, nothing to patch */
-        if (pid && !strcmp(titleid, WANT_TITLEID))
+        if (pid && is_wanted_title(titleid))
             break;
         usleep(POLL_FAST_USEC);
     }
-    if (waited >= LIMIT || !pid || strcmp(titleid, WANT_TITLEID) != 0) {
+    if (waited >= LIMIT || !pid || !is_wanted_title(titleid)) {
         tlog("TIMEOUT_NO_GAME");
         return 0; /* quiet exit: nothing was ever launched */
     }

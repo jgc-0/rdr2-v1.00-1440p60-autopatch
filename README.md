@@ -1,9 +1,9 @@
 # RDR2 60fps Autopatch (PS5)
 
-60 FPS for Red Dead Redemption 2 (PS4, `CUSA03041` — versions 1.00, 1.29 and
-1.32) on a jailbroken PS5, without installing any modded PKG and without touching
-the disk: the patch is applied in memory each time the game boots. Nothing
-persists, so shutting the console down leaves it clean.
+60 FPS for Red Dead Redemption 2 (PS4, `CUSA03041` USA / `CUSA08519` EUR —
+versions 1.00, 1.29 and 1.32) on a jailbroken PS5, without installing any modded
+PKG and without touching the disk: the patch is applied in memory each time the
+game boots. Nothing persists, so shutting the console down leaves it clean.
 
 Made by **KurohaXR**.
 
@@ -93,6 +93,20 @@ The 1.00 and 1.29 rows use the same site, verified against the real eboots of
 those versions (on 1.29, illusion's published address points at the `test` two
 bytes before the target, a 5-byte overwrite; this tool overwrites only the
 3-byte `cmove` with an equivalent result).
+The EUR eboot (`CUSA08519`) is handled by the same table rows. Verified on
+hardware: **1.00** is byte-identical to the USA 1.00 eboot (same size, same
+patch site, same context), and **1.32** matched the USA 1.32 row's context
+gate. By that same reasoning EUR **1.29** should work — regions have shared
+identical eboots so far — but it has not been tested.
+
+Nothing is written on region alone. The applier makes two checks: first, that
+the game is RDR2 in a supported region (USA or EUR) — that only decides the
+game is worth looking at. Then, for whichever version is actually running, it
+compares 64 bytes around the patch site against what was verified for that
+version, and writes the 3-byte patch only on an exact match. A EUR install
+goes through that same check as a USA one; if a version ever differed, the
+tool would simply write nothing. In short: EUR 1.29 should work, but only that
+same check can confirm it.
 
 - Applier: `autopatch60-oneshot.elf`, which waits for RDR2's eboot, **detects
   the running version** (64-byte context gate per row — memory decides, not
@@ -110,8 +124,10 @@ bytes before the target, a 5-byte overwrite; this tool overwrites only the
 - Jailbroken PS5 with `elfldr` (port 9021).
 - [`ps5debug-NG`](https://github.com/OpenSourcereR-dev/ps5debug-NG) v1.3.0
   (server on port 744; the autopatcher is its client on `127.0.0.1`).
-- RDR2 (PS4) `CUSA03041` clean install: **1.00** (base), **1.29** or **1.32**
-  (base + unmodded update).
+- RDR2 (PS4) clean install: `CUSA03041` (USA) **1.00** (base), **1.29** or
+  **1.32** (base + unmodded update); or `CUSA08519` (EUR) **1.00** (base) or
+  **1.32** (base + unmodded update). EUR **1.29** is expected to work but is
+  untested.
 - A Payload Manager with autoload (recommended) or manual loading of 2 ELFs.
 
 ## How to Use
@@ -143,6 +159,11 @@ ships one-shot only.
   expected — nothing persists.
 - **v1.00 (base) and v1.29 (update) validated in-game** with the one-shot:
   version-tagged notification (`v01.00` / `v01.29`) and 60fps confirmed.
+- **EUR CUSA08519 (v1.00 and v1.32) validated in-game**: same rows as USA
+  (v1.00 byte-identical; v1.32 matched the 01.32 context gate), version-tagged
+  notifications (`v01.00` / `v01.32`) and 60fps confirmed. **EUR v1.29:
+  untested** — expected to work by the same eboot identity, not claimed until
+  verified.
 - Closing the game (Home → Options → Close) is clean with one-shot across all trials.
 - With the **resident** daemon, one kernel trap (`Fatal trap 12: page fault in
   kernel mode`) was captured exactly at game close. Correlation, not proof — but
