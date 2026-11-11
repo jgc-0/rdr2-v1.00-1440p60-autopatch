@@ -1,223 +1,39 @@
-# RDR2 60fps Autopatch (PS5)
+# RDR2 60fps autopatch + 1440p (fork)
 
-60 FPS for Red Dead Redemption 2 (PS4, `CUSA03041` USA / `CUSA08519` EUR —
-versions 1.00, 1.29 and 1.32) on a jailbroken PS5, without installing any modded
-PKG and without touching the disk: the patch is applied in memory each time the
-game boots. Nothing persists, so shutting the console down leaves it clean.
+Fork of [KurohaXR/rdr2-60fps-autopatch](https://github.com/KurohaXR/rdr2-60fps-autopatch), the in-memory 60 fps patcher for
+Red Dead Redemption 2 on a jailbroken PS5. All credit for the original 60 fps patcher, its research and its write-up goes to
+KurohaXR; this fork keeps their code, license and credits.
 
-Made by **KurohaXR**.
+## What this fork adds
 
-A note on who I am: I'm not a scene developer. I'm a user who started
-reviewing kernel logs to track down a repeated crash and see whether a fix was
-possible. I could not determine the exact cause of the bug in the update package
-that includes the patch, so instead of fixing that package, I worked around it:
-a clean install plus a 3-byte runtime patch for the one game that kept crashing
-my console.
+`rdr2_1440p60.elf`: a resident variant for RDR2 PS4 v1.00 (CUSA03041) that, on top of the 60 fps patch, renders at 1440p
+(2560x1440) and re-applies itself on every game launch instead of once per payload run. The extra code is in [`1440p/`](1440p/);
+see its README for what it writes and how to build it.
 
-That also sets the scope: this was built specifically for RDR2. Porting it
-elsewhere is not copy-paste work — it requires reading that game's own bytes,
-locating its own framerate lock and verifying it live, exactly as done here. Do
-not expect updates for other titles or versions. This repository does one job.
+The original `src/` (the one-shot patcher) and the original build workflow are unchanged. The original README, with the
+background, requirements for v1.32, disclaimer and test notes, is at the upstream link above.
 
-This project is a small fix, nothing more. I respect and admire the work of all
-the real developers contributing to the scene — exploit researchers, tool authors,
-patch makers. This exists only because their work exists first.
+## Use
 
-## The problem (summary)
+1. Jailbroken PS5 with elfldr and ps5debug-NG running, same as upstream.
+2. Load `rdr2_1440p60.elf` once per console boot (Payload Manager). It stays resident and patches each game launch.
+3. Launch RDR2 v1.00. The message "RDR2 60fps + 1440p" appears once the patch lands.
 
-An update package for 1.32 that includes the 60fps patch causes a reproducible
-crash on jailbroken PS5s: install it, reboot, jailbreak again, and roughly 90
-seconds later the console reboots on its own — without the game ever being launched.
-
-## How it was found
-
-The pattern was consistent for weeks: install RDR2 with the 60fps patch, play for
-hours without a single issue, shut down — and the next jailbreak would kernel
-panic about 90 seconds in. No game launched, no unusual payloads loaded. Deleting
-the game restored stability every time; reinstalling brought the crashes back.
-
-The striking part was that the game itself ran flawlessly. A defective patch would
-be expected to crash during play, not idle in the menu the next day. That pointed
-away from game code, so I started capturing the kernel log with klogsrv, before
-and after reboot. The same sequence showed up all three times:
-
-```
-GetStorageInfo(...REDEMPTION...) -> end OK
-out_of_range 'invalid string position' in SceAppInstallerJobQueue
-SceShellCore dies -> coredump -> reboot
-```
-
-Neither the exploit, nor kstuff, nor anything I loaded: the system kills itself
-while scanning that update package's data during the post-boot background scan.
-The base game alone scans clean. A clean update scans clean. Only the package
-that includes the patch trips it. Three out of three captures, identical signature.
-
-Ruling alternatives out took most of the effort: a base-only install stays stable
-across reboots, a clean 1.32 update stays stable, and stock firmware (no jailbreak)
-with the mod stays stable for hours. It takes both conditions at once — jailbroken
-state plus that update package — to trigger it. Deleting the game fixes it
-because the scan simply skips a record that no longer exists (which also explains
-why the freed space never quite added up: the uninstaller leaves stubs behind).
-
-### Why not from ItemzFlow
-
-That was tried first, naturally. ItemzFlow lists Jao's patch, allows enabling it,
-reports it as matching 1.32 — and then nothing changes. Still 30fps.
-
-The code explains why: ItemzFlow only lists, toggles and launches. Whatever writes
-bytes into memory is a separate component — on PS4 it's GoldHEN's patch plugin; on
-PS5 it's the etaHEN/ItemzFlow "xml patches" plugin. On my console that engine was
-inactive: the toggle file on disk stayed at `0`, etaHEN's log showed no trace of it,
-and reading the game's live memory showed the original bytes untouched.
-
-Chasing that further would have meant working through etaHEN versions, toolbox
-states and plugin reinstalls. The direct approach already had a verified result —
-writing the 3 bytes through ps5debug works on the first attempt — so ItemzFlow was
-set aside in favor of a dedicated daemon. Fewer moving parts, no ambiguity about
-what writes what.
-
-## The fix
-
-Don't install the mod. Play on a **clean** install and unlock the framerate live:
-
-| version | Address (`eboot+X`) | original | patch   |
-|---------|---------------------|----------|---------|
-| 01.00   | `0x04A8EE1F`        | `0f 44 f0` | `31 f6 90` |
-| 01.29   | `0x0578AB59`        | `0f 44 f0` | `31 f6 90` |
-| 01.32   | `0x05853029`        | `0f 44 f0` | `31 f6 90` |
-
-The 1.32 *Unlock FPS* patch is by **Jao**, from
-[`illusionyy/PS-Game-Patch`](https://github.com/illusionyy/PS-Game-Patch)
-(file `patches/xml/RedDeadRedemption2-Orbis.xml` upstream — not vendored here).
-The 1.00 and 1.29 rows use the same site, verified against the real eboots of
-those versions (on 1.29, illusion's published address points at the `test` two
-bytes before the target, a 5-byte overwrite; this tool overwrites only the
-3-byte `cmove` with an equivalent result).
-The EUR eboot (`CUSA08519`) is handled by the same table rows. Verified on
-hardware: **1.00** is byte-identical to the USA 1.00 eboot (same size, same
-patch site, same context), and **1.32** matched the USA 1.32 row's context
-gate. By that same reasoning EUR **1.29** should work — regions have shared
-identical eboots so far — but it has not been tested.
-
-Nothing is written on region alone. The applier makes two checks: first, that
-the game is RDR2 in a supported region (USA or EUR) — that only decides the
-game is worth looking at. Then, for whichever version is actually running, it
-compares 64 bytes around the patch site against what was verified for that
-version, and writes the 3-byte patch only on an exact match. A EUR install
-goes through that same check as a USA one; if a version ever differed, the
-tool would simply write nothing. In short: EUR 1.29 should work, but only that
-same check can confirm it.
-
-- Applier: `autopatch60-oneshot.elf`, which waits for RDR2's eboot, **detects
-  the running version** (64-byte context gate per row — memory decides, not
-  labels), **verifies the original bytes**, writes the patch, re-verifies,
-  notifies (`RDR2 60fps ON v01.xx - By KurohaXR`) and **exits**. Nothing
-  resident, no traffic after patching. If anything doesn't match, it writes
-  nothing.
-- One subtlety found through testing: the write has to land within the first
-  seconds of the process's life (the game selects its video mode once at boot).
-  The one-shot handles that by itself: it waits for the spawn and writes within
-  seconds, before the game reads the value.
-
-## Requirements
-
-- Jailbroken PS5 with `elfldr` (port 9021).
-- [`ps5debug-NG`](https://github.com/OpenSourcereR-dev/ps5debug-NG) v1.3.0
-  (server on port 744; the autopatcher is its client on `127.0.0.1`).
-- RDR2 (PS4) clean install: `CUSA03041` (USA) **1.00** (base), **1.29** or
-  **1.32** (base + unmodded update); or `CUSA08519` (EUR) **1.00** (base) or
-  **1.32** (base + unmodded update). EUR **1.29** is expected to work but is
-  untested.
-- A Payload Manager with autoload (recommended) or manual loading of 2 ELFs.
-
-## How to Use
-
-1. After jailbreaking, load `ps5debug-NG.elf` (once, autoload-friendly) and then
-   `autopatch60-oneshot.elf` manually once per play session (Payload Manager).
-   On load you get a `RDR2: waiting for game` notification (if `ps5debug-NG` is
-   missing you get `ps5debug-NG not found or not running` instead).
-2. Launch RDR2 whenever convenient (no time pressure: it waits up to 10 minutes,
-   then exits quietly if no game appears).
-3. The `RDR2 60fps ON v01.xx - By KurohaXR` notification appears — play at 60fps.
-4. When finished, close the game normally. Nothing remains (the patcher already
-   exited; the patch lived only in the dead game's RAM).
-
-A resident variant (patching continuously while the game ran) was tested during
-development and then discarded: a kernel trap (`Fatal trap 12: page fault in
-kernel mode`) was captured exactly at game close with it active. Correlation,
-not proof — but combined with the one-shot's clean closes across all trials,
-continuous debugger traffic during teardown is the leading suspect. This repo
-ships one-shot only.
-
-> ⚠️ Don't run `klogsrv` at the same time as `ps5debug-NG` (both listen on port 3232).
-
-## Test results (PS5 FAT FW 12.00, real hardware)
-
-- **v1.32 (clean update): 5/5 cold boots at 60fps**, playing across map areas
-  and saving in different spots. A save-position dependence theory was proposed
-  and did not hold up. Relaunching without loading the patcher gives 30fps, as
-  expected — nothing persists.
-- **v1.00 (base) and v1.29 (update) validated in-game** with the one-shot:
-  version-tagged notification (`v01.00` / `v01.29`) and 60fps confirmed.
-- **EUR CUSA08519 (v1.00 and v1.32) validated in-game**: same rows as USA
-  (v1.00 byte-identical; v1.32 matched the 01.32 context gate), version-tagged
-  notifications (`v01.00` / `v01.32`) and 60fps confirmed. **EUR v1.29:
-  untested** — expected to work by the same eboot identity, not claimed until
-  verified.
-- Closing the game (Home → Options → Close) is clean with one-shot across all trials.
-- With the **resident** daemon, one kernel trap (`Fatal trap 12: page fault in
-  kernel mode`) was captured exactly at game close. Correlation, not proof — but
-  combined with the one-shot's clean closes, continuous debugger traffic during
-  teardown is the leading suspect, so only the one-shot ships here.
-- 1 KP + power-off in 6 boots overall (undetermined cause, possibly other payloads
-  in the chain — not attributed to either flavor without evidence).
-- Rest mode → wake → relaunch: no issues.
-- **Do NOT use the Common-FPS overlay for measuring on FW 12.00**: reloading it
-  froze the console with a system error (no reboot). It is validated only on FW
-  9.60, and it hooks ShellUI render paths with a documented history of kernel
-  panics. FPS figures gathered during testing came from it before this was known —
-  interpret them accordingly.
-
-## Building (once, on a PC with Linux/WSL)
-
-```bash
-sudo apt install clang-18 lld-18 make git wget unzip
-# binary SDK:
-sudo mkdir -p /opt && cd /tmp
-wget https://github.com/ps5-payload-dev/sdk/releases/latest/download/ps5-payload-sdk.zip
-sudo unzip -d /opt ps5-payload-sdk.zip
-export LLVM_CONFIG=/usr/bin/llvm-config-18   # if present; else: sudo apt install llvm-18-dev
-export PS5_PAYLOAD_SDK=/opt/ps5-payload-sdk
-cd src && make        # -> autopatch60-oneshot.elf
-```
-
-## Disclaimer
-
-Experimental software, no warranty of any kind. Provided "as is". Use it at your
-own risk: it could crash the game (it should never touch the system, but nothing
-is promised). The author accepts no responsibility for lost data, corrupted saves
-or bans. If something breaks, restart the game; if the console misbehaves, reboot
-it (nothing persists).
+This build targets game v1.00. Offsets are specific to it and the patch checks the original bytes before writing, so on a
+different version it should write nothing and report an error.
 
 ## Credits
 
-- Made by **KurohaXR**.
-- 1.32 *Unlock FPS* patch: **Jao**; patch repo
-  [`illusionyy/PS-Game-Patch`](https://github.com/illusionyy/PS-Game-Patch) (**illusion**).
-  The 1.00 / 1.29 rows use the same site, verified against those versions' real
-  eboots (1.29 cross-checked against illusion's published address).
-- [`ps5debug-NG`](https://github.com/OpenSourcereR-dev/ps5debug-NG) (**OpenSourcereR** et al.)
-  + [`ps5-payload-sdk`](https://github.com/ps5-payload-dev/sdk),
-  [`elfldr`](https://github.com/ps5-payload-dev/elfldr),
-  `klogsrv`, `ftpsrv` (**John Törnblom** / ps5-payload-dev) — without these tools
-  (and their authors) none of this would exist.
-- Patch-format references: GoldHEN Cheat Repository, PS4 Cheats Manager (**bucanero**),
-  ItemzFlow (**LightningMods**).
+- Original 60 fps autopatch: KurohaXR.
+- 1.32 Unlock FPS patch: Jao; patch repo illusionyy/PS-Game-Patch.
+- ps5debug-NG (OpenSourcereR et al.); ps5-payload-sdk, elfldr, klogsrv, ftpsrv (John Törnblom / ps5-payload-dev).
 
-## License note
+## License
 
-This repo's code is MIT. Building links against
-[`ps5-payload-sdk`](https://github.com/ps5-payload-dev/sdk) (GPL-3); since the
-full source is published here, distributed binaries comply as long as this same
-source goes with them.
+Same as upstream: the code is MIT. Building the original links against ps5-payload-sdk (GPL-3), so distribute the source
+with any binaries.
 
+## Disclaimer
+
+Experimental software, no warranty of any kind, provided "as is". Use at your own risk; the author accepts no responsibility
+for lost data, corrupted saves or bans.
